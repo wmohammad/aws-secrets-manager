@@ -1,0 +1,3 @@
+1. Need Secrets to be stored as hash, so when developer or any person do console.log for process.env, they should get secrets
+2. Database keys should be rotated using kms and should be synced with secrets manager
+3. Server should not restart when secrets are rotated
