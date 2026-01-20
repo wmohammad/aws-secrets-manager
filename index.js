@@ -27,9 +27,18 @@ async function startServer() {
 
     // New API to debug secrets from process.env
     app.get("/debug/env-secrets", (req, res) => {
+        const getVal = (key) => {
+            const val = process.env[key];
+            // Check if it's a SecureSecret object
+            if (val && typeof val.reveal === "function") {
+                return "[SECURE_SECRET] (Use .reveal() in code)";
+            }
+            return val || "Not Set";
+        };
+
         res.json({
-            DB_HOST: process.env.DB_HOST || "Not Set",
-            API_KEY: process.env.API_KEY || "Not Set",
+            DB_HOST: getVal("DB_HOST"),
+            API_KEY: getVal("API_KEY"),
             PORT: process.env.PORT || "3000 (default)",
             AWS_SECRET_NAME: process.env.AWS_SECRET_NAME || "employee-api-secrets"
         });
@@ -54,12 +63,12 @@ async function startServer() {
         console.log(`Server is running on http://localhost:${PORT}`);
     });
 
-    // Automatically refresh secrets every 5 minutes
-    const REFRESH_INTERVAL = 5 * 60 * 1000;
-    setInterval(async () => {
-        console.log("Automatically refreshing secrets from AWS...");
-        await getSecrets(SECRET_NAME);
-    }, REFRESH_INTERVAL);
+    // // Automatically refresh secrets every 5 minutes
+    // const REFRESH_INTERVAL = 5 * 60 * 1000;
+    // setInterval(async () => {
+    //     console.log("Automatically refreshing secrets from AWS...");
+    //     await getSecrets(SECRET_NAME);
+    // }, REFRESH_INTERVAL);
 }
 
 startServer();

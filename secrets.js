@@ -2,36 +2,55 @@ const {
   SecretsManagerClient,
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
+const util = require("util");
 
 const client = new SecretsManagerClient({
   region: "ap-south-1",
 });
+
+/**
+ * A wrapper class to prevent secrets from being accidentally printed in logs.
+ */
+class SecureSecret {
+  #value;
+  constructor(value) {
+    this.#value = value;
+  }
+
+  reveal() {
+    return this.#value;
+  }
+
+  toString() { return "[SECURE_SECRET]"; }
+  toJSON() { return "[SECURE_SECRET]"; }
+  [util.inspect.custom]() { return "[SECURE_SECRET]"; }
+}
 
 async function getSecrets(secretName) {
   try {
     const response = await client.send(
       new GetSecretValueCommand({
         SecretId: secretName,
-        VersionStage: "AWSCURRENT", // VersionStage defaults to AWSCURRENT if unspecified
+        VersionStage: "AWSCURRENT",
       })
     );
 
     if ("SecretString" in response) {
       const secrets = JSON.parse(response.SecretString);
-      // Inject secrets into process.env
+
+      // Wrap each secret in the SecureSecret protector
       Object.keys(secrets).forEach((key) => {
-        process.env[key] = secrets[key];
+        process.env[key] = new SecureSecret(secrets[key]);
       });
-      console.log(`Successfully loaded secrets from ${secretName}`);
+
+      console.log(`Successfully loaded and SECURED secrets from ${secretName}`);
       return secrets;
     } else {
       console.warn("Secret binary data found, but not handled.");
     }
   } catch (error) {
     console.error(`Error fetching secrets from AWS: ${error.message}`);
-    // If we fail to fetch from AWS, we might want to fall back to .env or exit
-    // For this hands-on, we'll just log and proceed (which might fail later)
   }
 }
 
-module.exports = { getSecrets };
+module.exports = { getSecrets, SecureSecret };
