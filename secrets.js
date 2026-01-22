@@ -1,12 +1,9 @@
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
+  DescribeSecretCommand,
 } = require("@aws-sdk/client-secrets-manager");
 const util = require("util");
-
-const client = new SecretsManagerClient({
-  region: "ap-south-1",
-});
 
 /**
  * A wrapper class to prevent secrets from being accidentally printed in logs.
@@ -26,8 +23,18 @@ class SecureSecret {
   [util.inspect.custom]() { return "[SECURE_SECRET]"; }
 }
 
-async function getSecrets(secretName) {
+const clients = {};
+
+function getClient(region) {
+  if (!clients[region]) {
+    clients[region] = new SecretsManagerClient({ region });
+  }
+  return clients[region];
+}
+
+async function getSecrets(secretName, region = "us-west-2") {
   try {
+    const client = getClient(region);
     const response = await client.send(
       new GetSecretValueCommand({
         SecretId: secretName,
@@ -38,19 +45,33 @@ async function getSecrets(secretName) {
     if ("SecretString" in response) {
       const secrets = JSON.parse(response.SecretString);
 
-      // Wrap each secret in the SecureSecret protector
+      // Wrap each secret in the SecureSecret protector and inject into process.env
       Object.keys(secrets).forEach((key) => {
         process.env[key] = new SecureSecret(secrets[key]);
       });
 
-      console.log(`Successfully loaded and SECURED secrets from ${secretName}`);
+      console.log(`Successfully loaded and SECURED secrets from ${secretName} (${region})`);
       return secrets;
     } else {
       console.warn("Secret binary data found, but not handled.");
     }
   } catch (error) {
-    console.error(`Error fetching secrets from AWS: ${error.message}`);
+    console.error(`Error fetching secrets from AWS (${secretName} in ${region}): ${error.message}`);
+  }
+}
+async function getSecretMetadata(secretName, region = "us-west-2") {
+  try {
+    const client = getClient(region);
+    const response = await client.send(
+      new DescribeSecretCommand({
+        SecretId: secretName,
+      })
+    );
+    return response;
+  } catch (error) {
+    console.error(`Error fetching metadata for ${secretName}: ${error.message}`);
+    return null;
   }
 }
 
-module.exports = { getSecrets, SecureSecret };
+module.exports = { getSecrets, getSecretMetadata, SecureSecret };
